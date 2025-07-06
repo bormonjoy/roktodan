@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, Loader2 } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase';
 import SectionTitle from '../components/common/SectionTitle';
 import FormInput from '../components/common/FormInput';
@@ -82,12 +81,10 @@ const DonateMoneyPage = () => {
       email: formData.email || null,
       phone: formData.phone,
       amount: Number(formData.amount),
-      payment_method: 'Manual/Online',
-      transaction_id: uuidv4(),
     };
 
     console.log(donationPayload);
-      const response = await fetch('https://home-fix-server-nine.vercel.app/api/pay',{
+      const response = await fetch('https://roktodan-server.vercel.app/api/pay',{
         method :'POST',
         headers: {
            'Content-Type': 'application/json',
