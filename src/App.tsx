@@ -16,11 +16,12 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import ScrollToTop from './components/utils/ScrollToTop';
 import OTPVerificationPage from './pages/OTPVerificationPage';
 import DonationHistoryPage from './pages/DonationHistoryPage';
+import DonationSuccessPage from './pages/DonationSuccessPage';
+import DonationFailPage from './pages/DonationFailPage';
+import DonationCancelPage from './pages/DonationCancelPage';
 
 function App() {
   return (
-    // The AuthProvider must wrap the Router so that hooks like useNavigate
-    // are available within the AuthContext.
     <Router>
       <AuthProvider>
         <ScrollToTop />
@@ -35,10 +36,15 @@ function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/donation-history" element={<DonationHistoryPage />} />
               
+              {/* --- ADD THESE ROUTES FOR DONATION STATUS --- */}
+              <Route path="/donation/success" element={<DonationSuccessPage />} />
+              <Route path="/donation/fail" element={<DonationFailPage />} />
+              <Route path="/donation/cancel" element={<DonationCancelPage />} />
+              
               {/* Auth Routes */}
               <Route path="/signin" element={<SignInForm />} />
               <Route path="/signup" element={<SignUpForm />} />
-              <Route path="/verify-otp" element={<OTPVerificationPage />} /> {/* <-- ADDED ROUTE */}
+              <Route path="/verify-otp" element={<OTPVerificationPage />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               
               {/* Protected Routes */}
