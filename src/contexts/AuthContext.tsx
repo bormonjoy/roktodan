@@ -54,7 +54,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
   const navigate = useNavigate();
 
   const fetchProfile = useCallback(async (userId: string) => {
@@ -89,6 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const initializeAuth = async () => {
       try {
+        // Get the current session
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -98,13 +98,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (!mounted) return;
 
+        console.log('📋 Initial session:', session ? 'Found' : 'None');
+        
         setSession(session);
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
         if (currentUser) {
+          console.log('👤 User found, fetching profile...');
           await fetchProfile(currentUser.id);
         } else {
+          console.log('👤 No user found');
           setProfile(null);
         }
       } catch (error) {
@@ -116,38 +120,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         }
       } finally {
         if (mounted) {
+          console.log('✅ Auth initialization complete');
           setLoading(false);
-          setInitialized(true);
         }
       }
     };
 
+    // Initialize auth state
     initializeAuth();
 
-    // Set up the listener for future changes
+    // Set up the listener for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log(`🔄 Auth state change event: ${event}`);
         
         if (!mounted) return;
 
-        // Skip the initial session event if we've already initialized
-        if (event === 'INITIAL_SESSION' && initialized) {
-          return;
-        }
-
-        try {
+        // Handle different auth events
+        if (event === 'SIGNED_IN') {
+          console.log('✅ User signed in');
           setSession(session);
           const currentUser = session?.user ?? null;
           setUser(currentUser);
-
+          
           if (currentUser) {
             await fetchProfile(currentUser.id);
-          } else {
-            setProfile(null);
           }
-        } catch (error) {
-          console.error('❌ Error in auth state change:', error);
+        } else if (event === 'SIGNED_OUT') {
+          console.log('👋 User signed out');
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('🔄 Token refreshed');
+          setSession(session);
+        }
+        
+        // Don't set loading to false here for INITIAL_SESSION
+        // as it's already handled in initializeAuth
+        if (event !== 'INITIAL_SESSION') {
+          setLoading(false);
         }
       }
     );
@@ -157,33 +169,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfile, initialized]);
+  }, [fetchProfile]);
 
   const signOut = async () => {
-    const originalLoading = loading;
-    setLoading(true);
     try {
+      console.log('👋 Signing out...');
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
+      // Clear state immediately
       setUser(null);
       setProfile(null);
       setSession(null);
+      
+      console.log('✅ Sign out successful');
       navigate('/signin');
     } catch (error) {
       console.error('❌ Error signing out:', error);
-      // Restore original loading state on error
-      setLoading(originalLoading);
       throw error;
-    } finally {
-      // Don't set loading to false here as navigation will handle it
     }
   };
 
   const signUp = async (email: string, password: string, profileData: any) => {
-    const originalLoading = loading;
-    setLoading(true);
     try {
+      console.log('📝 Signing up user...');
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -191,40 +200,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           data: profileData,
         },
       });
+      console.log('✅ Sign up response:', { data: !!data, error: !!error });
       return { data, error };
     } catch (error) {
       console.error('❌ Error signing up:', error);
-      setLoading(originalLoading);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const signIn = async (email: string, password: string) => {
-    const originalLoading = loading;
-    setLoading(true);
     try {
+      console.log('🔑 Signing in user...');
       const result = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+      console.log('✅ Sign in response:', { data: !!result.data, error: !!result.error });
       return result;
     } catch (error) {
       console.error('❌ Error signing in:', error);
-      setLoading(originalLoading);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) throw new Error('No user is logged in');
     
-    const originalLoading = loading;
-    setLoading(true);
     try {
+      console.log('📝 Updating profile...');
       const { error } = await supabase
         .from('profiles')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -232,49 +235,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       
       if (error) throw error;
       await fetchProfile(user.id);
+      console.log('✅ Profile updated successfully');
     } catch (error) {
       console.error('❌ Error updating profile:', error);
-      setLoading(originalLoading);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
   
   const verifyOtp = async (email: string, token: string) => {
-    const originalLoading = loading;
-    setLoading(true);
     try {
+      console.log('🔐 Verifying OTP...');
       const result = await supabase.auth.verifyOtp({
         email,
         token,
         type: 'signup',
       });
+      console.log('✅ OTP verification response:', { data: !!result.data, error: !!result.error });
       return result;
     } catch (error) {
       console.error('❌ Error verifying OTP:', error);
-      setLoading(originalLoading);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const resendOtp = async (email: string) => {
-    const originalLoading = loading;
-    setLoading(true);
     try {
+      console.log('📧 Resending OTP...');
       const result = await supabase.auth.resend({
         email,
         type: 'signup',
       });
+      console.log('✅ OTP resend response:', { data: !!result.data, error: !!result.error });
       return result;
     } catch (error) {
       console.error('❌ Error resending OTP:', error);
-      setLoading(originalLoading);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -293,9 +288,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   return (
     <AuthContext.Provider value={value}>
-      {loading && !initialized ? (
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary" />
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-gray-600">Loading...</p>
+          </div>
         </div>
       ) : (
         children
