@@ -54,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const navigate = useNavigate();
 
   const fetchProfile = useCallback(async (userId: string) => {
@@ -67,7 +68,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (error && status !== 406) {
         console.warn('⚠️ Error fetching profile:', error.message);
-        throw error;
+        // Don't throw error, just set profile to null
+        setProfile(null);
+        return;
       }
 
       if (data) {
@@ -83,27 +86,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   useEffect(() => {
-    console.log('🔐 Setting up auth listener...');
+    console.log('🔐 Setting up auth...');
     let mounted = true;
 
     const initializeAuth = async () => {
       try {
+        console.log('🚀 Initializing auth...');
+        
         // Get the current session
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('❌ Error getting session:', error);
-          throw error;
         }
 
         if (!mounted) return;
 
-        console.log('📋 Initial session:', session ? 'Found' : 'None');
+        console.log('📋 Initial session check:', session ? 'Session found' : 'No session');
         
+        // Set the session and user state
         setSession(session);
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
+        // If we have a user, fetch their profile
         if (currentUser) {
           console.log('👤 User found, fetching profile...');
           await fetchProfile(currentUser.id);
@@ -111,61 +117,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           console.log('👤 No user found');
           setProfile(null);
         }
+
+        // Mark initial load as complete
+        if (mounted) {
+          console.log('✅ Initial auth check complete');
+          setInitialLoadComplete(true);
+          setLoading(false);
+        }
       } catch (error) {
-        console.error('❌ Error initializing auth:', error);
+        console.error('❌ Error in initializeAuth:', error);
         if (mounted) {
           setUser(null);
           setProfile(null);
           setSession(null);
-        }
-      } finally {
-        if (mounted) {
-          console.log('✅ Auth initialization complete');
+          setInitialLoadComplete(true);
           setLoading(false);
         }
       }
     };
 
-    // Initialize auth state
+    // Initialize auth state immediately
     initializeAuth();
 
-    // Set up the listener for auth state changes
+    // Set up the auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log(`🔄 Auth state change event: ${event}`);
+        console.log(`🔄 Auth event: ${event}`);
         
         if (!mounted) return;
 
-        // Handle different auth events
-        if (event === 'SIGNED_IN') {
-          console.log('✅ User signed in');
-          setSession(session);
-          const currentUser = session?.user ?? null;
-          setUser(currentUser);
-          
-          if (currentUser) {
-            await fetchProfile(currentUser.id);
-          }
-        } else if (event === 'SIGNED_OUT') {
-          console.log('👋 User signed out');
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-        } else if (event === 'TOKEN_REFRESHED') {
-          console.log('🔄 Token refreshed');
-          setSession(session);
+        // Skip INITIAL_SESSION as we handle it in initializeAuth
+        if (event === 'INITIAL_SESSION') {
+          console.log('⏭️ Skipping INITIAL_SESSION event');
+          return;
         }
-        
-        // Don't set loading to false here for INITIAL_SESSION
-        // as it's already handled in initializeAuth
-        if (event !== 'INITIAL_SESSION') {
-          setLoading(false);
+
+        try {
+          // Handle different auth events
+          switch (event) {
+            case 'SIGNED_IN':
+              console.log('✅ User signed in');
+              setSession(session);
+              setUser(session?.user ?? null);
+              if (session?.user) {
+                await fetchProfile(session.user.id);
+              }
+              break;
+              
+            case 'SIGNED_OUT':
+              console.log('👋 User signed out');
+              setSession(null);
+              setUser(null);
+              setProfile(null);
+              break;
+              
+            case 'TOKEN_REFRESHED':
+              console.log('🔄 Token refreshed');
+              setSession(session);
+              setUser(session?.user ?? null);
+              break;
+              
+            default:
+              console.log(`🔄 Unhandled auth event: ${event}`);
+          }
+        } catch (error) {
+          console.error('❌ Error handling auth state change:', error);
         }
       }
     );
 
     return () => {
-      console.log('🧹 Unsubscribing from auth listener...');
+      console.log('🧹 Cleaning up auth...');
       mounted = false;
       subscription.unsubscribe();
     };
@@ -177,11 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
-      // Clear state immediately
-      setUser(null);
-      setProfile(null);
-      setSession(null);
-      
+      // State will be cleared by the auth state change listener
       console.log('✅ Sign out successful');
       navigate('/signin');
     } catch (error) {
@@ -286,18 +304,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     resendOtp,
   };
 
+  // Show loading spinner only during initial load
+  if (!initialLoadComplete) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AuthContext.Provider value={value}>
-      {loading ? (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto mb-4" />
-            <p className="text-gray-600">Loading...</p>
-          </div>
-        </div>
-      ) : (
-        children
-      )}
+      {children}
     </AuthContext.Provider>
   );
 };
