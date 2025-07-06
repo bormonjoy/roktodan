@@ -15,6 +15,7 @@ import Dashboard from './components/dashboard/Dashboard';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ScrollToTop from './components/utils/ScrollToTop';
 import OTPVerificationPage from './pages/OTPVerificationPage';
+import DonationHistoryPage from './pages/DonationHistoryPage';
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
               <Route path="/find-donor" element={<FindDonorPage />} />
               <Route path="/donate-money" element={<DonateMoneyPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/donation-history" element={<DonationHistoryPage />} />
               
               {/* Auth Routes */}
               <Route path="/signin" element={<SignInForm />} />

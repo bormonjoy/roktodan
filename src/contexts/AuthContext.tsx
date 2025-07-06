@@ -1,10 +1,14 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from 'react';
+import { User, Session, AuthResponse } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
-import { AuthResponse } from '@supabase/supabase-js';
 
-// Define the shape of your profile data
 export interface Profile {
   id: string;
   name: string;
@@ -20,7 +24,6 @@ export interface Profile {
   medical_conditions: string | null;
 }
 
-// Define the shape of the context value
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
@@ -44,143 +47,238 @@ export const useAuth = () => {
   return context;
 };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (event === 'SIGNED_IN' && session?.user) {
-        await fetchProfile(session.user.id);
-      }
-      
-      if (event === 'SIGNED_OUT') {
-        setProfile(null);
-        setUser(null);
-        setSession(null);
-        navigate('/signin');
-      }
-
-      setLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [navigate]);
-
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
+    console.log('📦 Fetching profile for:', userId);
     try {
-      const { data, error } = await supabase
+      const { data, error, status } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) {
-        if (error.code !== '406') {
-          console.error('Error fetching profile:', error);
-        }
-        setProfile(null);
-        return;
+      if (error && status !== 406) {
+        console.warn('⚠️ Error fetching profile:', error.message);
+        throw error;
       }
 
       if (data) {
         setProfile(data);
+        console.log('✅ Profile fetched:', data);
+      } else {
+        setProfile(null);
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('❌ Unexpected error in fetchProfile:', error);
       setProfile(null);
     }
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string, profileData: any) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: profileData
+  useEffect(() => {
+    console.log('🔐 Setting up auth listener...');
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ Error getting session:', error);
+          throw error;
+        }
+
+        if (!mounted) return;
+
+        setSession(session);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          await fetchProfile(currentUser.id);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error('❌ Error initializing auth:', error);
+        if (mounted) {
+          setUser(null);
+          setProfile(null);
+          setSession(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+          setInitialized(true);
+        }
       }
-    });
-    return { data, error };
-  };
+    };
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
-  };
+    initializeAuth();
+
+    // Set up the listener for future changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log(`🔄 Auth state change event: ${event}`);
+        
+        if (!mounted) return;
+
+        // Skip the initial session event if we've already initialized
+        if (event === 'INITIAL_SESSION' && initialized) {
+          return;
+        }
+
+        try {
+          setSession(session);
+          const currentUser = session?.user ?? null;
+          setUser(currentUser);
+
+          if (currentUser) {
+            await fetchProfile(currentUser.id);
+          } else {
+            setProfile(null);
+          }
+        } catch (error) {
+          console.error('❌ Error in auth state change:', error);
+        }
+      }
+    );
+
+    return () => {
+      console.log('🧹 Unsubscribing from auth listener...');
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile, initialized]);
 
   const signOut = async () => {
+    const originalLoading = loading;
+    setLoading(true);
     try {
-      setLoading(true);
       const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Error signing out:', error);
-        throw error;
-      }
+      if (error) throw error;
+      
       setUser(null);
       setProfile(null);
       setSession(null);
       navigate('/signin');
     } catch (error) {
-      console.error('Error during sign out:', error);
+      console.error('❌ Error signing out:', error);
+      // Restore original loading state on error
+      setLoading(originalLoading);
+      throw error;
+    } finally {
+      // Don't set loading to false here as navigation will handle it
+    }
+  };
+
+  const signUp = async (email: string, password: string, profileData: any) => {
+    const originalLoading = loading;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: profileData,
+        },
+      });
+      return { data, error };
+    } catch (error) {
+      console.error('❌ Error signing up:', error);
+      setLoading(originalLoading);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    const originalLoading = loading;
+    setLoading(true);
+    try {
+      const result = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      return result;
+    } catch (error) {
+      console.error('❌ Error signing in:', error);
+      setLoading(originalLoading);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
-    if (!user) throw new Error("No user is logged in");
+    if (!user) throw new Error('No user is logged in');
+    
+    const originalLoading = loading;
+    setLoading(true);
     try {
       const { error } = await supabase
         .from('profiles')
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', user.id);
+      
       if (error) throw error;
       await fetchProfile(user.id);
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error('❌ Error updating profile:', error);
+      setLoading(originalLoading);
       throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const verifyOtp = async (email: string, token: string) => {
+    const originalLoading = loading;
+    setLoading(true);
+    try {
+      const result = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'signup',
+      });
+      return result;
+    } catch (error) {
+      console.error('❌ Error verifying OTP:', error);
+      setLoading(originalLoading);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // --- NEW FUNCTIONS ---
-  const verifyOtp = async (email: string, token: string) => {
-    return await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'signup',
-    });
-  };
-
   const resendOtp = async (email: string) => {
-    return await supabase.auth.resend({
-      email,
-      type: 'signup',
-    });
+    const originalLoading = loading;
+    setLoading(true);
+    try {
+      const result = await supabase.auth.resend({
+        email,
+        type: 'signup',
+      });
+      return result;
+    } catch (error) {
+      console.error('❌ Error resending OTP:', error);
+      setLoading(originalLoading);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
-  // --------------------
 
-  const value = {
+  const value: AuthContextType = {
     user,
     profile,
     session,
@@ -195,10 +293,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading ? children : (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+      {loading && !initialized ? (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary" />
         </div>
+      ) : (
+        children
       )}
     </AuthContext.Provider>
   );

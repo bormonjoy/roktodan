@@ -1,4 +1,3 @@
-import React from 'react';
 import { Droplet, Users, MapPin, Heart } from 'lucide-react';
 
 const StatsSection = () => {

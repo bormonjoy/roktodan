@@ -1,4 +1,3 @@
-import React from 'react';
 import { ClipboardCheck, Search, Phone, Award } from 'lucide-react';
 import SectionTitle from '../common/SectionTitle';
 
