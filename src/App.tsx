@@ -37,9 +37,9 @@ function App() {
               <Route path="/donation-history" element={<DonationHistoryPage />} />
               
               {/* --- ADD THESE ROUTES FOR DONATION STATUS --- */}
-              <Route path="/donation/success" element={<DonationSuccessPage />} />
-              <Route path="/donation/fail" element={<DonationFailPage />} />
-              <Route path="/donation/cancel" element={<DonationCancelPage />} />
+              <Route path="/donation-success" element={<DonationSuccessPage />} />
+              <Route path="/donation-fail" element={<DonationFailPage />} />
+              <Route path="/donation-cancel" element={<DonationCancelPage />} />
               
               {/* Auth Routes */}
               <Route path="/signin" element={<SignInForm />} />
