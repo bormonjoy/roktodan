@@ -22,7 +22,7 @@ const DonateMoneyPage = () => {
   const [formData, setFormData] = useState<FormData>({ name: '', email: '', phone: '', amount: '' });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting,] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // State for the history section
