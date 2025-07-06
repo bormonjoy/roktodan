@@ -76,31 +76,38 @@ const DonateMoneyPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    const donationPayload = {
+    try{
+      const donationPayload = {
       name: formData.name,
       email: formData.email || null,
       phone: formData.phone,
       amount: Number(formData.amount),
-      payment_method: 'Manual/Online', // This can be dynamic if you have a payment method selector
+      payment_method: 'Manual/Online',
       transaction_id: uuidv4(),
     };
 
-    const { error } = await supabase.from('donations').insert([donationPayload]);
+    console.log(donationPayload);
+      const response = await fetch('https://home-fix-server-nine.vercel.app/api/pay',{
+        method :'POST',
+        headers: {
+           'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(donationPayload),
+      });
 
-    if (error) {
-      console.error('Error submitting donation:', error);
-      setSubmitError('An error occurred. Please try again.');
-      setIsSubmitting(false);
-      return;
+     const data = await response.json();
+      if(response.ok && data.url){
+        window.location.href =  data.url;
+      } else {
+        throw new Error(data.error || 'Failed to initiate payment.');
+      }
+    }catch(error){
+       console.error('Booking error:', error);
+      alert('Error in donating: ' );
+    }finally {
+      console.log('There is something wrong.');
     }
-
-    setIsSubmitted(true);
-    setIsSubmitting(false);
-    fetchRecentDonations(); // Refresh the list to show the new donation
+    
   };
 
   const resetForm = () => {
