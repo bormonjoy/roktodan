@@ -73,39 +73,48 @@ const DonateMoneyPage = () => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-    try{
-      const donationPayload = {
+  e.preventDefault();
+  if (!validateForm()) return;
+
+  const amount = Number(formData.amount);
+  if (isNaN(amount)) {
+    alert("Invalid donation amount.");
+    return;
+  }
+
+  try {
+    const donationPayload = {
       name: formData.name,
       email: formData.email || null,
       phone: formData.phone,
-      amount: Number(formData.amount),
+      amount: amount,
     };
 
     console.log(donationPayload);
-      const response = await fetch('https://roktodan-server.vercel.app/api/pay',{
-        method :'POST',
-        headers: {
-           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(donationPayload),
-      });
 
-     const data = await response.json();
-      if(response.ok && data.url){
-        window.location.href =  data.url;
-      } else {
-        throw new Error(data.error || 'Failed to initiate payment.');
-      }
-    }catch(error){
-       console.error('Booking error:', error);
-      alert('Error in donating: ' );
-    }finally {
-      console.log('There is something wrong.');
+    const response = await fetch('https://roktodan-server.vercel.app/api/pay', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(donationPayload),
+    });
+
+    const data: { url?: string; error?: string } = await response.json();
+
+    if (response.ok && data.url) {
+      window.location.href = data.url;
+    } else {
+      throw new Error(data.error || 'Failed to initiate payment.');
     }
-    
-  };
+  } catch (error) {
+    console.error('Booking error:', error);
+    alert('Error in donating: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  } finally {
+    console.log('Donation request completed.');
+  }
+};
+
 
   const resetForm = () => {
     setFormData({ name: '', email: '', phone: '', amount: '' });
